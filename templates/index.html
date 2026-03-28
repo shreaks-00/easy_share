@@ -10,23 +10,22 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 480px; background: var(--card-bg); padding: 20px; border-radius: 16px; border: 1px solid var(--border); box-sizing: border-box; margin-bottom: 15px; }
         
-        /* Drag and Drop Zone Styling */
         .drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 10px; transition: 0.3s; position: relative; }
         .drop-zone.dragover { border-color: var(--primary); background: #818cf810; }
         
         input, textarea { width: 100%; background: #0b1120; border: 1px solid var(--border); border-radius: 10px; padding: 12px; color: white; margin-bottom: 12px; box-sizing: border-box; font-size: 16px; outline: none; }
         .btn { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; font-size: 16px; }
-        .btn:disabled { background: #475569; }
+        .btn:disabled { background: #475569; opacity: 0.7; cursor: not-allowed; }
         .room-tag { background: #334155; padding: 8px 14px; border-radius: 20px; display: inline-block; margin: 4px; font-size: 14px; cursor: pointer; }
-        .card { background: var(--card-bg); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 12px; position: relative; }
-        .action-btn { position: absolute; top: 10px; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; }
+        .card { background: var(--card-bg); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 12px; position: relative; overflow: hidden; }
+        .action-btn { position: absolute; top: 10px; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; z-index: 10; }
         .copy-btn { right: 10px; background: #475569; }
         .save-btn { right: 70px; background: var(--accent); text-decoration: none; }
         img { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ffffff10; display: block; }
         #chatSection { display: none; width: 100%; max-width: 480px; }
         #previewBox { display: none; background: #0b1120; padding: 10px; border-radius: 10px; margin-bottom: 12px; border: 1px dashed var(--primary); position: relative; text-align: center; }
         #previewImg { max-height: 150px; border-radius: 5px; }
-        .close-pre { position: absolute; top: 5px; right: 5px; background: var(--danger); border: none; color: white; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; }
+        .close-pre { position: absolute; top: 5px; right: 5px; background: var(--danger); border: none; color: white; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; z-index: 20; }
     </style>
 </head>
 <body>
@@ -43,7 +42,7 @@
 <div id="chatSection">
     <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:10px;">
         <span id="roomTitle" style="font-weight:bold; color:var(--primary)"></span>
-        <button onclick="location.reload()" style="background:none; border:none; color:var(--danger); font-weight:bold;">Leave</button>
+        <button onclick="location.reload()" style="background:none; border:none; color:var(--danger); font-weight:bold; cursor:pointer;">Leave</button>
     </div>
     
     <div class="container drop-zone" id="dropZone">
@@ -64,6 +63,7 @@
 <script>
     const socket = io();
     let curRoom = "";
+    let selectedFile = null; // Store the file globally
     const dropZone = document.getElementById('dropZone');
 
     // --- DRAG AND DROP LOGIC ---
@@ -84,24 +84,29 @@
 
     dropZone.addEventListener('drop', (e) => {
         const dt = e.dataTransfer;
-        const files = dt.files;
-        handleFiles(files);
+        handleFiles(dt.files);
     });
 
     function handleFiles(files) {
         if (files && files[0]) {
-            // Set the file input's files so the send function can find it
-            document.getElementById('fileInp').files = files; 
+            selectedFile = files[0]; // Set the global file variable
             const reader = new FileReader();
             reader.onload = (e) => {
                 document.getElementById('previewImg').src = e.target.result;
                 document.getElementById('previewBox').style.display = 'block';
             };
-            reader.readAsDataURL(files[0]);
+            reader.readAsDataURL(selectedFile);
         }
     }
-    // --- END DRAG AND DROP ---
 
+    function clearPreview() {
+        selectedFile = null;
+        document.getElementById('fileInp').value = '';
+        document.getElementById('previewBox').style.display = 'none';
+        document.getElementById('previewImg').src = '';
+    }
+
+    // --- ROOM LOGIC ---
     socket.on('update_rooms', (rooms) => {
         const div = document.getElementById('roomsContainer');
         div.innerHTML = rooms.length ? "" : "<small>No active rooms</small>";
@@ -130,24 +135,27 @@
 
     socket.on('error', m => alert(m));
 
-    function clearPreview() {
-        document.getElementById('fileInp').value = '';
-        document.getElementById('previewBox').style.display = 'none';
-    }
-
+    // --- SEND LOGIC ---
     function send() {
         const text = document.getElementById('msgText').value.trim();
-        const file = document.getElementById('fileInp').files[0];
+        const file = selectedFile; // Use our stored file
+        
         if(!text && !file) return;
 
         const btn = document.getElementById('sendBtn');
         btn.disabled = true;
+        btn.innerText = "Sending...";
 
         if(file) {
             const reader = new FileReader();
             reader.onload = () => {
                 socket.emit('send_message', { text, image: reader.result, room: curRoom });
                 resetUI();
+            };
+            reader.onerror = () => {
+                alert("Failed to read file");
+                btn.disabled = false;
+                btn.innerText = "Broadcast";
             };
             reader.readAsDataURL(file);
         } else {
@@ -159,7 +167,9 @@
     function resetUI() {
         document.getElementById('msgText').value = '';
         clearPreview();
-        document.getElementById('sendBtn').disabled = false;
+        const btn = document.getElementById('sendBtn');
+        btn.disabled = false;
+        btn.innerText = "Broadcast";
     }
 
     socket.on('receive_message', data => renderMessage(data));
@@ -167,10 +177,16 @@
     function renderMessage(data) {
         const div = document.createElement('div');
         div.className = 'card';
-        const save = data.image ? `<a href="${data.image}" download="img.png" class="action-btn save-btn">SAVE</a>` : '';
+        const save = data.image ? `<a href="${data.image}" download="shared_img.png" class="action-btn save-btn">SAVE</a>` : '';
         const img = data.image ? `<img src="${data.image}">` : '';
         const safeText = (data.text || '').replace(/</g, '&lt;');
-        div.innerHTML = `<button class="action-btn copy-btn" onclick="copy(this)">COPY</button>${save}<p style="margin:0; white-space:pre-wrap;">${safeText}</p>${img}`;
+        
+        div.innerHTML = `
+            <button class="action-btn copy-btn" onclick="copy(this)">COPY</button>
+            ${save}
+            <p style="margin:0; white-space:pre-wrap; padding-top: 5px;">${safeText}</p>
+            ${img}
+        `;
         document.getElementById('feed').prepend(div);
     }
 
