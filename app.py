@@ -3,7 +3,8 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'super-secret-key'
-# Allow up to 5MB for images
+
+# Allow up to 5MB for images to prevent mobile crashes
 socketio = SocketIO(app, cors_allowed_origins="*", max_http_payload_size=5 * 1024 * 1024)
 
 # Data storage
@@ -27,12 +28,10 @@ def handle_create(data):
         room_counts[name] = 1
         user_sessions[request.sid] = name
         join_room(name)
-        # 1. Update global list for everyone
         emit('update_rooms', list(active_rooms.keys()), broadcast=True)
-        # 2. Tell the creator they joined and send (empty) history
         emit('join_success', {'name': name, 'history': []})
     else:
-        emit('error', 'Room name taken!')
+        emit('error', 'Room name taken or invalid!')
 
 @socketio.on('join_room')
 def handle_join(data):
@@ -41,7 +40,6 @@ def handle_join(data):
         join_room(name)
         room_counts[name] += 1
         user_sessions[request.sid] = name
-        # IMPORTANT: Send the stored history ONLY to the user who just joined
         emit('join_success', {
             'name': name, 
             'history': active_rooms[name]["history"] 
@@ -53,9 +51,7 @@ def handle_join(data):
 def handle_message(data):
     room = data.get('room')
     if room in active_rooms:
-        # Save message to the list so it persists for future joiners
         active_rooms[room]["history"].append(data)
-        # Broadcast to everyone in the room (including sender)
         emit('receive_message', data, to=room)
 
 @socketio.on('disconnect')
@@ -65,13 +61,10 @@ def on_disconnect():
     if room:
         room_counts[room] -= 1
         if room_counts[room] <= 0:
-            # If zero users left, delete room and history
             active_rooms.pop(room, None)
             room_counts.pop(room, None)
             emit('update_rooms', list(active_rooms.keys()), broadcast=True)
         user_sessions.pop(sid, None)
 
 if __name__ == '__main__':
-    # 'allow_unsafe_werkzeug=True' helps in some cloud environments
-    # but for true production, 'eventlet' or 'gevent' is used automatically by socketio.run
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
