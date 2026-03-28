@@ -2,53 +2,60 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Live Share</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Live Share Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         :root { --primary: #818cf8; --bg: #0f172a; --card-bg: #1e293b; --text: #f1f5f9; --border: #334155; --accent: #10b981; --danger: #ef4444; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 480px; background: var(--card-bg); padding: 20px; border-radius: 16px; border: 1px solid var(--border); box-sizing: border-box; margin-bottom: 15px; }
+        
+        /* Drag and Drop Zone Styling */
+        .drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 10px; transition: 0.3s; position: relative; }
+        .drop-zone.dragover { border-color: var(--primary); background: #818cf810; }
+        
         input, textarea { width: 100%; background: #0b1120; border: 1px solid var(--border); border-radius: 10px; padding: 12px; color: white; margin-bottom: 12px; box-sizing: border-box; font-size: 16px; outline: none; }
         .btn { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; font-size: 16px; }
-        .btn-secondary { background: var(--border); margin-top: 8px; color: var(--accent); }
-        .room-tag { background: #334155; padding: 6px 14px; border-radius: 20px; display: inline-block; margin: 4px; font-size: 13px; cursor: pointer; }
+        .btn:disabled { background: #475569; }
+        .room-tag { background: #334155; padding: 8px 14px; border-radius: 20px; display: inline-block; margin: 4px; font-size: 14px; cursor: pointer; }
         .card { background: var(--card-bg); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 12px; position: relative; }
-        .action-btn { position: absolute; top: 10px; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; text-decoration: none; }
+        .action-btn { position: absolute; top: 10px; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; }
         .copy-btn { right: 10px; background: #475569; }
-        .save-btn { right: 70px; background: var(--accent); }
+        .save-btn { right: 70px; background: var(--accent); text-decoration: none; }
         img { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ffffff10; display: block; }
         #chatSection { display: none; width: 100%; max-width: 480px; }
-        .status-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; width:100%; max-width:480px; }
         #previewBox { display: none; background: #0b1120; padding: 10px; border-radius: 10px; margin-bottom: 12px; border: 1px dashed var(--primary); position: relative; text-align: center; }
-        #previewImg { max-height: 120px; border-radius: 5px; }
-        .close-pre { position: absolute; top: 5px; right: 5px; background: var(--danger); border: none; color: white; border-radius: 50%; cursor: pointer; width: 20px; height: 20px; }
+        #previewImg { max-height: 150px; border-radius: 5px; }
+        .close-pre { position: absolute; top: 5px; right: 5px; background: var(--danger); border: none; color: white; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="container" id="loginSection">
-    <h2 style="margin:0 0 15px 0">🏠 Hub</h2>
-    <div id="roomsContainer" style="margin-bottom:15px"></div>
+    <h2>🏠 Hub</h2>
+    <div id="roomsContainer"></div><br>
     <input type="text" id="rName" placeholder="Room Name">
     <input type="password" id="rPass" placeholder="Password">
     <button class="btn" onclick="auth('create_room')">Create Room</button>
-    <button class="btn btn-secondary" onclick="auth('join_room')">Join Room</button>
+    <button class="btn" style="background:var(--border); margin-top:8px; color:var(--accent)" onclick="auth('join_room')">Join Room</button>
 </div>
 
 <div id="chatSection">
-    <div class="status-bar">
+    <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:10px;">
         <span id="roomTitle" style="font-weight:bold; color:var(--primary)"></span>
-        <button onclick="location.reload()" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:bold;">Leave Room</button>
+        <button onclick="location.reload()" style="background:none; border:none; color:var(--danger); font-weight:bold;">Leave</button>
     </div>
     
-    <div class="container">
-        <textarea id="msgText" placeholder="Message..." rows="2"></textarea>
+    <div class="container drop-zone" id="dropZone">
+        <p style="font-size: 12px; color: gray; margin-top: 0;">Drag image here or use button</p>
+        <textarea id="msgText" placeholder="Type message..." rows="2"></textarea>
+        
         <div id="previewBox">
             <button class="close-pre" onclick="clearPreview()">×</button>
             <img id="previewImg" src="">
         </div>
-        <input type="file" id="fileInp" accept="image/*" onchange="showPreview(this)">
+        
+        <input type="file" id="fileInp" accept="image/*" onchange="handleFiles(this.files)" style="margin-bottom:10px;">
         <button class="btn" id="sendBtn" onclick="send()">Broadcast</button>
     </div>
     <div id="feed"></div>
@@ -57,10 +64,47 @@
 <script>
     const socket = io();
     let curRoom = "";
+    const dropZone = document.getElementById('dropZone');
+
+    // --- DRAG AND DROP LOGIC ---
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, e => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    });
+
+    function handleFiles(files) {
+        if (files && files[0]) {
+            // Set the file input's files so the send function can find it
+            document.getElementById('fileInp').files = files; 
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewImg').src = e.target.result;
+                document.getElementById('previewBox').style.display = 'block';
+            };
+            reader.readAsDataURL(files[0]);
+        }
+    }
+    // --- END DRAG AND DROP ---
 
     socket.on('update_rooms', (rooms) => {
         const div = document.getElementById('roomsContainer');
-        div.innerHTML = rooms.length ? "" : "<small style='color:gray'>No active rooms</small>";
+        div.innerHTML = rooms.length ? "" : "<small>No active rooms</small>";
         rooms.forEach(r => {
             const s = document.createElement('span');
             s.className = 'room-tag'; s.innerText = r;
@@ -73,36 +117,18 @@
         const name = document.getElementById('rName').value;
         const password = document.getElementById('rPass').value;
         if(name && password) socket.emit(type, { name, password });
-        else alert("Fill all fields");
     }
 
-    // THIS IS THE CRITICAL PART FOR SEEING OLD MESSAGES
     socket.on('join_success', (data) => {
         curRoom = data.name;
         document.getElementById('loginSection').style.display = 'none';
         document.getElementById('chatSection').style.display = 'block';
-        document.getElementById('roomTitle').innerText = "🟢 Room: " + curRoom;
-        
-        // Clear screen and load ALL previous history
-        const feed = document.getElementById('feed');
-        feed.innerHTML = "";
-        if(data.history) {
-            data.history.forEach(msg => renderMessage(msg));
-        }
+        document.getElementById('roomTitle').innerText = "🟢 " + curRoom;
+        document.getElementById('feed').innerHTML = "";
+        if(data.history) data.history.forEach(msg => renderMessage(msg));
     });
 
-    socket.on('error', (m) => alert(m));
-
-    function showPreview(input) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                document.getElementById('previewImg').src = e.target.result;
-                document.getElementById('previewBox').style.display = 'block';
-            };
-            reader.readAsDataURL(input.files[0]);
-        }
-    }
+    socket.on('error', m => alert(m));
 
     function clearPreview() {
         document.getElementById('fileInp').value = '';
@@ -116,20 +142,16 @@
 
         const btn = document.getElementById('sendBtn');
         btn.disabled = true;
-        btn.innerText = "Sending...";
-
-        const payload = { text, image: null, room: curRoom };
 
         if(file) {
             const reader = new FileReader();
             reader.onload = () => {
-                payload.image = reader.result;
-                socket.emit('send_message', payload);
+                socket.emit('send_message', { text, image: reader.result, room: curRoom });
                 resetUI();
             };
             reader.readAsDataURL(file);
         } else {
-            socket.emit('send_message', payload);
+            socket.emit('send_message', { text, image: null, room: curRoom });
             resetUI();
         }
     }
@@ -137,34 +159,27 @@
     function resetUI() {
         document.getElementById('msgText').value = '';
         clearPreview();
-        const btn = document.getElementById('sendBtn');
-        btn.disabled = false;
-        btn.innerText = "Broadcast";
+        document.getElementById('sendBtn').disabled = false;
     }
 
-    socket.on('receive_message', (data) => renderMessage(data));
+    socket.on('receive_message', data => renderMessage(data));
 
     function renderMessage(data) {
         const div = document.createElement('div');
         div.className = 'card';
-        const save = data.image ? `<a href="${data.image}" download="shared_img.png" class="action-btn save-btn">SAVE</a>` : '';
+        const save = data.image ? `<a href="${data.image}" download="img.png" class="action-btn save-btn">SAVE</a>` : '';
         const img = data.image ? `<img src="${data.image}">` : '';
         const safeText = (data.text || '').replace(/</g, '&lt;');
-        
-        div.innerHTML = `
-            <button class="action-btn copy-btn" onclick="copy(this)">COPY</button>
-            ${save}
-            <p style="margin:0; white-space:pre-wrap;">${safeText}</p>
-            ${img}
-        `;
+        div.innerHTML = `<button class="action-btn copy-btn" onclick="copy(this)">COPY</button>${save}<p style="margin:0; white-space:pre-wrap;">${safeText}</p>${img}`;
         document.getElementById('feed').prepend(div);
     }
 
     function copy(btn) {
         const txt = btn.parentElement.querySelector('p').innerText;
-        navigator.clipboard.writeText(txt);
-        btn.innerText = "DONE";
-        setTimeout(() => btn.innerText = "COPY", 2000);
+        navigator.clipboard.writeText(txt).then(() => {
+            btn.innerText = "DONE";
+            setTimeout(() => btn.innerText = "COPY", 2000);
+        });
     }
 </script>
 </body>
