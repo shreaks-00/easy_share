@@ -3,99 +3,375 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Live Share Pro</title>
+    <title>Easy Share Pro | Simple & Secure</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        :root { --primary: #818cf8; --bg: #0f172a; --card-bg: #1e293b; --text: #f1f5f9; --border: #334155; --accent: #10b981; --danger: #ef4444; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 480px; background: var(--card-bg); padding: 20px; border-radius: 16px; border: 1px solid var(--border); box-sizing: border-box; margin-bottom: 15px; }
+        :root {
+            --matrix-green: #00ff41;
+            --matrix-glow: rgba(0, 255, 65, 0.4);
+            --matrix-dim: rgba(0, 255, 65, 0.15);
+            --bg-black: #050505;
+            --hud-bg: rgba(10, 10, 10, 0.9);
+            --hud-border: rgba(0, 255, 65, 0.3);
+            --text-main: #e0e0e0;
+            --error-red: #ff3e3e;
+            --font-mono: 'IBM Plex Mono', monospace;
+            --font-sans: 'Inter', sans-serif;
+        }
+
+        * { box-sizing: border-box; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); scroll-behavior: smooth; }
         
-        .drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 10px; transition: 0.3s; position: relative; }
-        .drop-zone.dragover { border-color: var(--primary); background: #818cf810; }
-        
-        input, textarea { width: 100%; background: #0b1120; border: 1px solid var(--border); border-radius: 10px; padding: 12px; color: white; margin-bottom: 12px; box-sizing: border-box; font-size: 16px; outline: none; }
-        .btn { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; font-size: 16px; }
-        .btn:disabled { background: #475569; opacity: 0.7; cursor: not-allowed; }
-        .room-tag { background: #334155; padding: 8px 14px; border-radius: 20px; display: inline-block; margin: 4px; font-size: 14px; cursor: pointer; }
-        .card { background: var(--card-bg); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 12px; position: relative; overflow: hidden; }
-        .action-btn { position: absolute; top: 10px; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; z-index: 10; }
-        .copy-btn { right: 10px; background: #475569; }
-        .save-btn { right: 70px; background: var(--accent); text-decoration: none; }
-        img { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ffffff10; display: block; }
-        #chatSection { display: none; width: 100%; max-width: 480px; }
-        #previewBox { display: none; background: #0b1120; padding: 10px; border-radius: 10px; margin-bottom: 12px; border: 1px dashed var(--primary); position: relative; text-align: center; }
-        #previewImg { max-height: 150px; border-radius: 5px; }
-        .close-pre { position: absolute; top: 5px; right: 5px; background: var(--danger); border: none; color: white; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; z-index: 20; }
+        body, html {
+            margin: 0; padding: 0;
+            background: var(--bg-black);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        #matrixCanvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; opacity: 0.45; pointer-events: none;
+        }
+
+        .hud-panel {
+            background: var(--hud-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--hud-border);
+            border-radius: 2px;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+            position: relative;
+        }
+
+        .hud-panel::before, .hud-panel::after {
+            content: ''; position: absolute; width: 20px; height: 20px; border-color: var(--matrix-green); border-style: solid; opacity: 0.7;
+        }
+        .hud-panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        .hud-panel::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+        .scanning-bar {
+            position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--matrix-green), transparent);
+            box-shadow: 0 0 10px var(--matrix-green); opacity: 0.4;
+            animation: scanLine 4s infinite linear;
+            pointer-events: none;
+        }
+
+        @keyframes scanLine { 0% { top: 0; } 100% { top: 100%; } }
+
+        .container {
+            width: 100%; max-width: 520px; padding: 40px; margin: 40px auto;
+            animation: bootUp 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        h1, h2 { font-family: var(--font-mono); color: var(--matrix-green); text-transform: uppercase; letter-spacing: 3px; }
+        h1 { font-size: 1.6rem; margin-bottom: 25px; text-shadow: 0 0 10px var(--matrix-glow); font-weight: 700; animation: flicker 3s infinite; }
+
+        @keyframes flicker {
+            0% { opacity: 0.9; } 5% { opacity: 0.8; } 10% { opacity: 0.9; } 15% { opacity: 1; }
+            50% { opacity: 0.9; } 80% { opacity: 0.9; } 100% { opacity: 1; }
+        }
+
+        .meta-label {
+            font-family: var(--font-mono); font-size: 0.7rem; color: var(--matrix-green);
+            text-transform: uppercase; margin-bottom: 8px; opacity: 0.7; font-weight: 600;
+        }
+
+        input, textarea {
+            width: 100%; background: rgba(0, 30, 5, 0.3); border: 1px solid var(--matrix-dim);
+            border-radius: 0; padding: 16px; color: var(--matrix-green); font-family: var(--font-mono);
+            font-size: 1rem; outline: none; margin-bottom: 20px;
+        }
+        input:focus, textarea:focus { border-color: var(--matrix-green); background: rgba(0, 50, 10, 0.45); }
+
+        .waiting-signal {
+            display: none; position: relative; width: 100px; height: 100px; margin: 20px auto;
+        }
+        .signal-ring {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            border: 2px solid var(--matrix-green); border-radius: 50%;
+            animation: ripple 2s infinite ease-out; opacity: 0;
+        }
+        .signal-ring:nth-child(2) { animation-delay: 0.5s; }
+        .signal-ring:nth-child(3) { animation-delay: 1s; }
+        .signal-core {
+            position: absolute; top: 35%; left: 35%; width: 30%; height: 30%;
+            background: var(--matrix-green); border-radius: 50%;
+            box-shadow: 0 0 20px var(--matrix-green); animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes ripple { 
+            0% { transform: scale(0.1); opacity: 0.8; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        @keyframes pulse { 0% { transform: scale(0.8); box-shadow: 0 0 10px var(--matrix-green); } 100% { transform: scale(1.2); box-shadow: 0 0 30px var(--matrix-green); } }
+
+        .btn {
+            background: transparent; border: 1px solid var(--matrix-green); color: var(--matrix-green);
+            padding: 16px; border-radius: 0; cursor: pointer; width: 100%; font-family: var(--font-mono);
+            font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1.5px;
+            position: relative; overflow: hidden;
+        }
+        .btn:hover:not(:disabled) { background: var(--matrix-green); color: black; box-shadow: 0 0 20px var(--matrix-glow); }
+        .btn:active:not(:disabled) { transform: scale(0.98); }
+        .btn:disabled { border-color: #333; color: #444; cursor: not-allowed; opacity: 0.5; }
+
+        .drop-zone {
+            padding: 35px; border: 1px dashed var(--hud-border); text-align: center; cursor: pointer;
+            margin-bottom: 20px; background: rgba(0, 15, 5, 0.2); position: relative;
+        }
+        .drop-zone.dragover { border-color: var(--matrix-green); background: var(--matrix-dim); border-style: solid; }
+
+        .msg-card { padding: 25px; margin-bottom: 20px; opacity: 0; transform: translateY(20px); animation: messageSlide 0.5s forwards cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes messageSlide { to { opacity: 1; transform: translateY(0); } }
+
+        .file-box {
+            display: flex; align-items: center; gap: 15px; margin-top: 18px;
+            padding: 15px; background: rgba(255, 255, 255, 0.03); border-left: 3px solid var(--matrix-green);
+        }
+
+        #toaster { position: fixed; top: 30px; right: 30px; z-index: 999; }
+        .toast {
+            background: var(--hud-bg); color: var(--matrix-green); border: 1px solid var(--matrix-green);
+            padding: 14px 22px; margin-bottom: 12px; font-family: var(--font-mono); font-size: 0.8rem;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.2); animation: toastSlide 0.4s ease-out;
+        }
+
+        @keyframes toastSlide { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes bootUp { from { opacity: 0; transform: scale(0.95) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+        .shimmer {
+            position: absolute; top: -100%; left: -100%; width: 300%; height: 300%;
+            background: linear-gradient(45deg, transparent 45%, rgba(0,255,65,0.1) 50%, transparent 55%);
+            animation: shimmerEffect 4s infinite linear; pointer-events: none;
+        }
+        @keyframes shimmerEffect { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+        .node-signal {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: rgba(0, 255, 65, 0.05); border: 1px solid var(--hud-border);
+            padding: 6px 12px; margin: 4px; font-family: var(--font-mono); font-size: 0.8rem;
+            cursor: pointer; color: var(--matrix-green);
+        }
+        .node-signal:hover { background: var(--matrix-dim); border-color: var(--matrix-green); }
+        .dot { width: 6px; height: 6px; background: var(--matrix-green); border-radius: 50%; box-shadow: 0 0 8px var(--matrix-green); animation: pulse 1s infinite alternate; }
     </style>
 </head>
 <body>
 
-<div class="container" id="loginSection">
-    <h2>🏠 Hub</h2>
-    <div id="roomsContainer"></div><br>
-    <input type="text" id="rName" placeholder="Room Name">
-    <input type="password" id="rPass" placeholder="Password">
-    <button class="btn" onclick="auth('create_room')">Create Room</button>
-    <button class="btn" style="background:var(--border); margin-top:8px; color:var(--accent)" onclick="auth('join_room')">Join Room</button>
+<canvas id="matrixCanvas"></canvas>
+<div id="toaster"></div>
+
+<div class="container hud-panel" id="loginSection">
+    <div class="scanning-bar"></div>
+    <h1>Easy Share Pro</h1>
+    <p style="opacity:0.6; margin-bottom: 35px; font-size: 0.85rem; line-height: 1.5;">Share files and text securely in real-time. Join or create a room to begin.</p>
+    
+    <div id="roomsContainer" style="margin-bottom: 25px;"></div>
+    
+    <div class="meta-label">Room Name</div>
+    <input type="text" id="rName" placeholder="Enter Room Name">
+    
+    <div class="meta-label">Password</div>
+    <input type="password" id="rPass" placeholder="Enter Room Password">
+    
+    <button class="btn" onclick="auth('create_room')">Create Room <div class="shimmer"></div></button>
+    <button class="btn" style="border-color:transparent; font-size: 0.8rem; margin-top: 10px;" onclick="auth('join_room')">Join Room</button>
+
+    <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--hud-border); text-align: center;">
+        <p style="font-family: var(--font-mono); font-size: 0.7rem; opacity: 0.5; line-height: 1.6;">
+            Notice: This site is for fast file sharing only.<br>
+            For chat rooms, please visit: 
+            <a href="https://yaper.online" target="_blank" style="color: var(--matrix-green); text-decoration: none; border-bottom: 1px dashed var(--matrix-green);">yaper.online</a>
+        </p>
+    </div>
 </div>
 
-<div id="chatSection">
-    <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:10px;">
-        <span id="roomTitle" style="font-weight:bold; color:var(--primary)"></span>
-        <button onclick="location.reload()" style="background:none; border:none; color:var(--danger); font-weight:bold; cursor:pointer;">Leave</button>
-    </div>
-    
-    <div class="container drop-zone" id="dropZone">
-        <p style="font-size: 12px; color: gray; margin-top: 0;">Drag image here or use button</p>
-        <textarea id="msgText" placeholder="Type message..." rows="2"></textarea>
-        
-        <div id="previewBox">
-            <button class="close-pre" onclick="clearPreview()">×</button>
-            <img id="previewImg" src="">
+<div id="chatSection" class="container" style="max-width: 650px; display:none">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 20px;">
+        <div>
+            <h2 id="roomTitle" style="margin:0; font-size: 1.4rem;">Room</h2>
+            <div style="display:flex; gap: 10px; align-items:center; margin-top: 5px;">
+                <div id="statusIndicator" style="font-family:var(--font-mono); font-size:0.75rem; color:var(--matrix-green);">Connecting...</div>
+                <button onclick="copyInvite()" id="inviteBtn" style="background:none; border:none; color:var(--text-main); font-size: 0.7rem; cursor:pointer; text-decoration: underline; opacity: 0.6; font-family:var(--font-mono)">Share Room Link</button>
+            </div>
         </div>
-        
-        <input type="file" id="fileInp" accept="image/*" onchange="handleFiles(this.files)" style="margin-bottom:10px;">
-        <button class="btn" id="sendBtn" onclick="send()">Broadcast</button>
+        <button onclick="location.reload()" class="btn" style="width:auto; padding: 10px 20px; font-size: 0.7rem; border-color: var(--error-red); color: var(--error-red);">Leave Room</button>
     </div>
+
+    <!-- Inside room notice -->
+    <div style="background: rgba(0, 255, 65, 0.05); border: 1px solid var(--hud-border); padding: 12px; margin-bottom: 25px; text-align: center;">
+        <p style="font-family: var(--font-mono); font-size: 0.7rem; opacity: 0.6; margin: 0; line-height: 1.5;">
+            Notice: This site is for fast file sharing only.<br>
+            For chat rooms, please visit: 
+            <a href="https://yaper.online" target="_blank" style="color: var(--matrix-green); text-decoration: none; border-bottom: 1px dashed var(--matrix-green);">yaper.online</a>
+        </p>
+    </div>
+
+    <div id="waitingHUD" class="hud-panel" style="padding: 40px 20px; text-align: center; margin-bottom: 20px;">
+        <div class="waiting-signal" id="signalAnim" style="display:block">
+            <div class="signal-ring"></div>
+            <div class="signal-ring"></div>
+            <div class="signal-ring"></div>
+            <div class="signal-core"></div>
+        </div>
+        <div class="meta-label" style="font-size: 0.9rem; margin-top: 15px;">Waiting for others...</div>
+        <p style="opacity:0.5; font-size: 0.75rem;">Join this room on another device to start sharing.</p>
+    </div>
+
+    <div class="hud-panel msg-card" style="margin-bottom: 35px; opacity: 1; transform: none; animation: none;">
+        <div id="typing"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+            <span class="meta-label">Type Message</span>
+            <span style="font-size: 0.65rem; color: var(--matrix-green); border: 1px solid var(--hud-border); padding: 3px 8px;">Max Size: 10MB</span>
+        </div>
+        <textarea id="msgText" placeholder="Start typing here..." rows="3" oninput="sendTyping()"></textarea>
+        
+        <div id="previewBox" style="display:none; position:relative; margin-bottom:20px">
+            <button onclick="clearPreview()" style="position:absolute; top: -10px; right: -10px; background:var(--error-red); border:none; color:white; padding:5px 10px; cursor:pointer; font-weight:bold; z-index: 10;">X</button>
+            <div class="file-box">
+                <span style="font-size: 1.8rem;" id="previewIcon">📄</span>
+                <div style="flex:1; overflow: hidden;">
+                    <div id="previewName" style="font-family:var(--font-mono); font-weight:600; font-size:0.85rem; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">filename.ext</div>
+                    <div id="previewSize" style="font-family:var(--font-mono); font-size:0.65rem; opacity:0.6">0 KB</div>
+                </div>
+            </div>
+            <img id="previewImg" style="max-width:100%; border:1px solid var(--hud-border); margin-top:15px; display:none;">
+        </div>
+
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInp').click()">
+            <div style="font-family:var(--font-sans); color:var(--matrix-green); font-size:1rem; font-weight: 600;">
+                Click Or Drop File Here
+            </div>
+            <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 6px;">Any file type (PDF, Images, Zip) up to 10MB</div>
+            <input type="file" id="fileInp" hidden onchange="handleFiles(this.files)">
+        </div>
+
+        <button class="btn" id="sendBtn" onclick="send()" disabled>Send File or Text <div class="shimmer"></div></button>
+    </div>
+
     <div id="feed"></div>
 </div>
 
 <script>
+    const canvas = document.getElementById('matrixCanvas');
+    const ctx = canvas.getContext('2d');
+    let columns, drops;
+    function initMatrix() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        columns = Math.floor(canvas.width / 16);
+        drops = Array(columns).fill(1);
+    }
+    function drawMatrix() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0F0';
+        ctx.font = '16px monospace';
+        for (let i = 0; i < drops.length; i++) {
+            const txt = String.fromCharCode(0x30A0 + Math.random() * 96);
+            ctx.fillText(txt, i * 16, drops[i] * 16);
+            if (drops[i] * 16 > canvas.height && Math.random() > 0.985) drops[i] = 0;
+            drops[i]++;
+        }
+        requestAnimationFrame(drawMatrix);
+    }
+    window.addEventListener('resize', initMatrix);
+    initMatrix(); drawMatrix();
+
     const socket = io();
-    let curRoom = "";
-    let selectedFile = null; // Store the file globally
+    let curRoom = "", selectedFile = null, typingTimeout = null, autoJoinAttempted = false;
     const dropZone = document.getElementById('dropZone');
 
-    // --- DRAG AND DROP LOGIC ---
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, e => {
-            e.preventDefault();
-            e.stopPropagation();
-        }, false);
+    function toast(m) {
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.innerText = m;
+        document.getElementById('toaster').appendChild(t);
+        setTimeout(() => { t.style.opacity = 0; setTimeout(() => t.remove(), 500); }, 3000);
+    }
+
+    socket.on('connect', () => {
+        if (autoJoinAttempted || curRoom) return;
+        const urlParams = new URLSearchParams(window.location.search);
+        const rName = urlParams.get('room');
+        const rPass = urlParams.get('pass') || urlParams.get('p');
+        
+        if (rName && rPass) {
+            document.getElementById('rName').value = rName;
+            document.getElementById('rPass').value = rPass;
+            toast("Joining room from link...");
+            autoJoinAttempted = true;
+            setTimeout(() => auth('join_room'), 800);
+        }
     });
 
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
-    });
+    function copyInvite() {
+        if (!curRoom) return;
+        const pass = document.getElementById('rPass').value.trim();
+        const url = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(curRoom)}&pass=${encodeURIComponent(pass)}`;
+        
+        const btn = document.getElementById('inviteBtn');
+        const fallbackCopy = (text) => {
+            const temp = document.createElement('textarea');
+            temp.value = text; document.body.appendChild(temp);
+            temp.select(); document.execCommand('copy');
+            document.body.removeChild(temp);
+            return true;
+        };
 
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
-    });
+        const success = () => {
+            btn.innerText = "Link Copied!";
+            setTimeout(() => btn.innerText = "Share Room Link", 2500);
+            toast("Link copied to clipboard");
+        };
 
-    dropZone.addEventListener('drop', (e) => {
-        const dt = e.dataTransfer;
-        handleFiles(dt.files);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(success).catch(() => {
+                if(fallbackCopy(url)) success();
+            });
+        } else {
+            if(fallbackCopy(url)) success();
+        }
+    }
+
+    function formatBytes(b) {
+        if (!b) return '0 B';
+        const k = 1024, i = Math.floor(Math.log(b) / Math.log(k));
+        return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
+    }
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eName => {
+        dropZone.addEventListener(eName, e => { e.preventDefault(); e.stopPropagation(); });
     });
+    ['dragenter', 'dragover'].forEach(eName => { dropZone.addEventListener(eName, () => dropZone.classList.add('dragover')); });
+    ['dragleave', 'drop'].forEach(eName => { dropZone.addEventListener(eName, () => dropZone.classList.remove('dragover')); });
+    dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
 
     function handleFiles(files) {
-        if (files && files[0]) {
-            selectedFile = files[0]; // Set the global file variable
-            const reader = new FileReader();
-            reader.onload = (e) => {
+        if (!files[0]) return;
+        selectedFile = files[0];
+        if (selectedFile.size > 10 * 1024 * 1024) { return toast("Error: File is too big (10MB limit)."); }
+        
+        document.getElementById('previewBox').style.display = 'block';
+        document.getElementById('previewName').innerText = selectedFile.name;
+        document.getElementById('previewSize').innerText = formatBytes(selectedFile.size);
+        const isImg = selectedFile.type.startsWith('image/');
+        document.getElementById('previewIcon').innerText = isImg ? '🖼️' : '📄';
+        if (isImg) {
+            const r = new FileReader();
+            r.onload = e => {
                 document.getElementById('previewImg').src = e.target.result;
-                document.getElementById('previewBox').style.display = 'block';
+                document.getElementById('previewImg').style.display = 'block';
             };
-            reader.readAsDataURL(selectedFile);
+            r.readAsDataURL(selectedFile);
+        } else {
+            document.getElementById('previewImg').style.display = 'none';
         }
     }
 
@@ -103,63 +379,92 @@
         selectedFile = null;
         document.getElementById('fileInp').value = '';
         document.getElementById('previewBox').style.display = 'none';
-        document.getElementById('previewImg').src = '';
     }
 
-    // --- ROOM LOGIC ---
     socket.on('update_rooms', (rooms) => {
         const div = document.getElementById('roomsContainer');
-        div.innerHTML = rooms.length ? "" : "<small>No active rooms</small>";
+        div.innerHTML = rooms.length ? "<div class='meta-label'>Public Rooms</div>" : "";
         rooms.forEach(r => {
-            const s = document.createElement('span');
-            s.className = 'room-tag'; s.innerText = r;
-            s.onclick = () => document.getElementById('rName').value = r;
+            const s = document.createElement('div');
+            s.className = 'node-signal';
+            s.innerHTML = `<div class="dot"></div><span>${r}</span>`;
+            s.onclick = () => {
+                document.getElementById('rName').value = r;
+                toast("Selected: " + r);
+            };
             div.appendChild(s);
         });
     });
 
     function auth(type) {
-        const name = document.getElementById('rName').value;
-        const password = document.getElementById('rPass').value;
-        if(name && password) socket.emit(type, { name, password });
+        const name = document.getElementById('rName').value.trim();
+        const password = document.getElementById('rPass').value.trim();
+        if(!name || !password) return toast("Error: Please enter Room Name and Password.");
+        socket.emit(type, { name, password });
     }
 
     socket.on('join_success', (data) => {
         curRoom = data.name;
         document.getElementById('loginSection').style.display = 'none';
         document.getElementById('chatSection').style.display = 'block';
-        document.getElementById('roomTitle').innerText = "🟢 " + curRoom;
+        document.getElementById('roomTitle').innerText = "Room: " + curRoom;
         document.getElementById('feed').innerHTML = "";
         if(data.history) data.history.forEach(msg => renderMessage(msg));
+        toast("Success! Joined " + curRoom);
     });
 
-    socket.on('error', m => alert(m));
+    socket.on('room_status', (data) => {
+        const head = document.getElementById('statusIndicator');
+        const hud = document.getElementById('waitingHUD');
+        const btn = document.getElementById('sendBtn');
+        const count = data.count;
+        if (count >= 2) {
+            head.innerText = `Connected (${count} users online)`;
+            head.style.color = 'var(--matrix-green)';
+            hud.style.display = 'none';
+            btn.disabled = false;
+        } else {
+            head.innerText = `Waiting for others...`;
+            head.style.color = 'var(--error-red)';
+            hud.style.display = 'block';
+            btn.disabled = true;
+        }
+    });
 
-    // --- SEND LOGIC ---
+    socket.on('error', m => toast("Error: " + m));
+
+    function sendTyping() {
+        if (!curRoom) return;
+        socket.emit('typing', { room: curRoom, isTyping: true });
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => socket.emit('typing', { room: curRoom, isTyping: false }), 2000);
+    }
+
+    socket.on('user_typing', d => {
+        document.getElementById('typing').innerText = d.isTyping ? "Someone is typing..." : "";
+    });
+
     function send() {
         const text = document.getElementById('msgText').value.trim();
-        const file = selectedFile; // Use our stored file
-        
+        const file = selectedFile;
         if(!text && !file) return;
 
         const btn = document.getElementById('sendBtn');
         btn.disabled = true;
         btn.innerText = "Sending...";
 
-        if(file) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                socket.emit('send_message', { text, image: reader.result, room: curRoom });
+        if (file) {
+            const r = new FileReader();
+            r.onload = () => {
+                socket.emit('send_message', { 
+                    text, fileData: r.result, fileName: file.name,
+                    fileType: file.type, fileSize: file.size, room: curRoom 
+                });
                 resetUI();
             };
-            reader.onerror = () => {
-                alert("Failed to read file");
-                btn.disabled = false;
-                btn.innerText = "Broadcast";
-            };
-            reader.readAsDataURL(file);
+            r.readAsDataURL(file);
         } else {
-            socket.emit('send_message', { text, image: null, room: curRoom });
+            socket.emit('send_message', { text, room: curRoom });
             resetUI();
         }
     }
@@ -169,34 +474,60 @@
         clearPreview();
         const btn = document.getElementById('sendBtn');
         btn.disabled = false;
-        btn.innerText = "Broadcast";
+        btn.innerText = "Send File or Text";
+        socket.emit('typing', { room: curRoom, isTyping: false });
     }
 
-    socket.on('receive_message', data => renderMessage(data));
+    socket.on('receive_message', d => renderMessage(d));
 
-    function renderMessage(data) {
+    function linkify(text) {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        return text.replace(urlRegex, (url) => `<a href="${url}" target="_blank" style="color:var(--matrix-green); text-decoration: underline;">${url}</a>`);
+    }
+
+    function renderMessage(d) {
         const div = document.createElement('div');
-        div.className = 'card';
-        const save = data.image ? `<a href="${data.image}" download="shared_img.png" class="action-btn save-btn">SAVE</a>` : '';
-        const img = data.image ? `<img src="${data.image}">` : '';
-        const safeText = (data.text || '').replace(/</g, '&lt;');
-        
+        div.className = 'hud-panel msg-card';
+        const safeText = (d.text || '').replace(/</g, '&lt;');
+        const linkedText = linkify(safeText);
+        let attachment = '';
+
+        if (d.fileData) {
+            const isImg = d.fileType && d.fileType.startsWith('image/');
+            attachment = `
+                <div class="file-box">
+                    <span style="font-size: 1.6rem;">${isImg ? '🖼️' : '📄'}</span>
+                    <div style="flex:1; overflow: hidden;">
+                        <div style="font-family:var(--font-mono); font-weight:700; font-size:0.8rem; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${d.fileName}</div>
+                        <div style="font-family:var(--font-mono); font-size:0.65rem; opacity:0.6">${formatBytes(d.fileSize)}</div>
+                    </div>
+                    <a href="${d.fileData}" download="${d.fileName}" class="btn" style="width:auto; padding:6px 12px; font-size:0.6rem; background:var(--matrix-green); color:black;">Download</a>
+                </div>
+                ${isImg ? `<img src="${d.fileData}" style="max-width:100%; border:1px solid var(--hud-border); margin-top:15px;">` : ''}
+            `;
+        }
+
         div.innerHTML = `
-            <button class="action-btn copy-btn" onclick="copy(this)">COPY</button>
-            ${save}
-            <p style="margin:0; white-space:pre-wrap; padding-top: 5px;">${safeText}</p>
-            ${img}
+            <span style="font-family:var(--font-mono); font-size:0.65rem; color:var(--matrix-dim); display:block; margin-bottom:10px;">Sent at ${new Date().toLocaleTimeString()}</span>
+            ${d.text ? `<p style="margin:0; line-height:1.7; font-size: 0.95rem;">${linkedText}</p>` : ''}
+            ${attachment}
+            ${d.text ? `<button class="btn" style="width:auto; margin-top:15px; padding:6px 12px; font-size:0.65rem; opacity:0.6" onclick="copy(this)">Copy Text</button>` : ''}
         `;
         document.getElementById('feed').prepend(div);
     }
 
-    function copy(btn) {
-        const txt = btn.parentElement.querySelector('p').innerText;
-        navigator.clipboard.writeText(txt).then(() => {
-            btn.innerText = "DONE";
-            setTimeout(() => btn.innerText = "COPY", 2000);
+    function copy(b) {
+        const t = b.parentElement.querySelector('p').innerText;
+        navigator.clipboard.writeText(t).then(() => {
+            const o = b.innerText; b.innerText = "Copied!";
+            setTimeout(() => b.innerText = o, 1500);
         });
     }
+
+    socket.on('disconnect', () => {
+        toast("Disconnected. Trying to reconnect...");
+        document.getElementById('sendBtn').disabled = true;
+    });
 </script>
 </body>
 </html>
